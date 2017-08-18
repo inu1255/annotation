@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"runtime"
 	"strings"
 )
 
@@ -30,9 +31,30 @@ func GetStructMethod(typ reflect.Type, methodName string) (funcDecl *ast.FuncDec
 	return getFunc(methodName, "", typ)
 }
 
-// get func
-func GetFunc(methodName, structPkg string) (funcDecl *ast.FuncDecl) {
+// get func by name
+func GetFuncByName(methodName, structPkg string) (funcDecl *ast.FuncDecl) {
 	return getFunc(methodName, structPkg, nil)
+}
+
+// get func or struct method
+func GetFunc(f interface{}) (funcDecl *ast.FuncDecl) {
+	pc := reflect.ValueOf(f).Pointer()
+	fn := runtime.FuncForPC(pc)
+	// github.com/inu1255/annotation.Abc
+	// github.com/inu1255/annotation.(*A).Show-fm
+	methodName := fn.Name()
+	dir, file := path.Split(methodName)
+	ss := strings.Split(file, ".")
+	// github.com/inu1255/annotation
+	structPkg := path.Join(dir, ss[0])
+	n := len(ss) - 1
+	methodName = ss[n]
+	structName := ""
+	if n > 1 {
+		structName = strings.Trim(ss[1], "(*)")
+		methodName = ss[n][:strings.LastIndex(ss[n], "-")]
+	}
+	return getFunc2(methodName, structPkg, structName)
 }
 
 // find func or struct method
@@ -45,6 +67,28 @@ func getFunc(methodName, structPkg string, typ reflect.Type) (funcDecl *ast.Func
 		structName = typ.Name()
 		structPkg = typ.PkgPath()
 	}
+	if fn := getFunc2(methodName, structPkg, structName); fn != nil {
+		return fn
+	}
+	if structName != "" {
+		// find parent's func
+		WalkFields(typ, func(field reflect.StructField) bool {
+			if field.Anonymous {
+				WalkMethods(field.Type, func(method reflect.Method) bool {
+					if method.Name == methodName {
+						funcDecl = GetStructMethodByMethod(method)
+						return true
+					}
+					return false
+				})
+			}
+			return false
+		})
+	}
+	return
+}
+
+func getFunc2(methodName, structPkg, structName string) (funcDecl *ast.FuncDecl) {
 	var mpkg map[string]*ast.Package
 	var err error
 	fset := token.NewFileSet()
@@ -80,21 +124,6 @@ func getFunc(methodName, structPkg string, typ reflect.Type) (funcDecl *ast.Func
 				}
 			}
 		}
-	}
-	if structName != "" {
-		// find parent's func
-		WalkFields(typ, func(field reflect.StructField) bool {
-			if field.Anonymous {
-				WalkMethods(field.Type, func(method reflect.Method) bool {
-					if method.Name == methodName {
-						funcDecl = GetStructMethodByMethod(method)
-						return true
-					}
-					return false
-				})
-			}
-			return false
-		})
 	}
 	return
 }
