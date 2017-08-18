@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path"
 	"reflect"
 	"runtime"
@@ -92,14 +93,18 @@ func getFunc2(methodName, structPkg, structName string) (funcDecl *ast.FuncDecl)
 	var mpkg map[string]*ast.Package
 	var err error
 	fset := token.NewFileSet()
-	separator := "/"
-	if os.IsPathSeparator('\\') {
-		separator = "\\"
-	}
-	if strings.Contains(structPkg, separator) {
-		mpkg, err = parser.ParseDir(fset, path.Join(os.Getenv("GOPATH"), "src", structPkg), nil, parser.ParseComments)
-	} else {
+	if structPkg == "" {
 		mpkg, err = parser.ParseDir(fset, ".", nil, parser.ParseComments)
+	} else {
+		gopath, goroot := GetGopathGoroot()
+		dir := path.Join("vendor", structPkg)
+		if _, err := os.Stat(dir); err != nil {
+			dir = path.Join(gopath, "src", structPkg)
+			if _, err := os.Stat(dir); err != nil {
+				dir = path.Join(goroot, "src", structPkg)
+			}
+		}
+		mpkg, err = parser.ParseDir(fset, dir, nil, parser.ParseComments)
 	}
 	if err != nil {
 		return nil
@@ -122,6 +127,23 @@ func getFunc2(methodName, structPkg, structName string) (funcDecl *ast.FuncDecl)
 						}
 					}
 				}
+			}
+		}
+	}
+	return
+}
+
+func GetGopathGoroot() (gopath, goroot string) {
+	output, _ := exec.Command("go", "env").Output()
+	s := string(output)
+	lines := strings.Split(s, "\n")
+	for _, s := range lines {
+		ss := strings.Split(s, "=")
+		if len(ss) > 1 {
+			if ss[0] == "GOPATH" {
+				gopath = strings.Trim(ss[1], "\"")
+			} else if ss[0] == "GOROOT" {
+				goroot = strings.Trim(ss[1], "\"")
 			}
 		}
 	}

@@ -32,13 +32,19 @@ func ExampleParse() {
 	b := &B{}
 	typ := reflect.TypeOf(a)
 	funcDecl := GetStructMethod(typ, "Show")
-	fmt.Println(funcDecl.Doc.Text())
+	if funcDecl != nil {
+		fmt.Println(funcDecl.Doc.Text())
+	}
 
 	funcDecl = GetFuncByName("Abc", "")
-	fmt.Println(funcDecl.Doc.Text())
+	if funcDecl != nil {
+		fmt.Println(funcDecl.Doc.Text())
+	}
 
 	funcDecl = GetFunc(b.Show)
-	fmt.Println(funcDecl.Doc.Text())
+	if funcDecl != nil {
+		fmt.Println(funcDecl.Doc.Text())
+	}
 	// output:
 	// show A
 	//
